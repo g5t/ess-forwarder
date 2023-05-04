@@ -4,25 +4,27 @@
 # Forwarder
 Forwards EPICS PVs to Apache Kafka. Part of the ESS data streaming pipeline.
 
-## Installing dependencies
-
-Python 3.8 or higher is required. https://www.python.org/downloads/
-
-Runtime Python dependencies are listed in requirements.txt at the root of the
-repository. They can be installed from a terminal by running
+## Installation
+Python 3.8 or higher is required. Update `pip` and install `forwarder`:
+```cmd
+python -m pip install --upgrade pip
+python -m pip install git+https://github.com/ess-dmsc/forwarder.git
 ```
-pip install -r requirements.txt
+
+Runtime dependencies are automatically installed by `pip`, or can be installed manually, e.g.,
+```cmd
+python -m pip install -r requirements.txt
 ```
 
 ## Usage
-To run with minimal settings:
+To run with minimal settings, after installing as above:
 ```
-forwarder_launch.py --config-topic some_server:9092/some_config_topic --status-topic some_server:9092/some_status_topic --output-broker some_other_server:9092
+forwarder_launch --config-topic some_server:9092/some_config_topic --status-topic some_server:9092/some_status_topic --output-broker some_other_server:9092
 ```
 
 For help:
 ```
-forwarder_launch.py --help
+forwarder_launch --help
 ```
 
 Required arguments:
