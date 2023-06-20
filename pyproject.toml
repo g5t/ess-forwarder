@@ -15,7 +15,7 @@ dynamic = ["dependencies"]
 forwarder-launch = "forwarder.scripts.run:main"
 
 [tool.setuptools.packages.find]
-include=["forwarder"]
+include=["forwarder", "forwarder.scripts", "forwarder.kafka", "forwarder.update_handlers"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
