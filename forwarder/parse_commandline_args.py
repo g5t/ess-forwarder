@@ -33,8 +33,9 @@ def get_version() -> str:
         # When installed, the pyproject file is not copied to the site-packages directory
         # So relative-path finding the TOML file fails. Instead we can leverage the setuptools
         # build metadata (since setuptools is a requirement of p4p, pkg_resources should be available)
-        from pkg_resources import get_distribution
-        return get_distribution('forwarder').version
+        # Or, the non-deprecated importlib.metadata version function
+        from importlib.metadata import version
+        return version('forwarder')
 
 
 def _print_version_if_requested():
