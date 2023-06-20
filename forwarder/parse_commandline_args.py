@@ -24,10 +24,17 @@ def get_version() -> str:
     """
     Gets the current version from the pyproject file
     """
-    path = Path(__file__).parent.parent / "pyproject.toml"
-    with open(path, "rb") as file:
-        config = tomli.load(file)
-    return str(config["project"]["version"])
+    try:
+        path = Path(__file__).parent.parent / "pyproject.toml"
+        with open(path, "rb") as file:
+            config = tomli.load(file)
+        return str(config["project"]["version"])
+    except FileNotFoundError:
+        # When installed, the pyproject file is not copied to the site-packages directory
+        # So relative-path finding the TOML file fails. Instead we can leverage the setuptools
+        # build metadata (since setuptools is a requirement of p4p, pkg_resources should be available)
+        from pkg_resources import get_distribution
+        return get_distribution('forwarder').version
 
 
 def _print_version_if_requested():
