@@ -1,20 +1,24 @@
-[![Build Status](https://jenkins.esss.dk/dm/job/ess-dmsc/job/forwarder/job/main/badge/icon)](https://jenkins.esss.dk/dm/job/ess-dmsc/job/forwarder/job/main/) [![codecov](https://codecov.io/gh/ess-dmsc/forwarder/branch/master/graph/badge.svg)](https://codecov.io/gh/ess-dmsc/forwarder)
+[![Build Status](https://gitlab.esss.lu.se/ecdc/ess-dmsc/forwarder/badges/main/pipeline.svg)](https://gitlab.esss.lu.se/ecdc/ess-dmsc/forwarder/-/pipelines) [![codecov](https://gitlab.esss.lu.se/ecdc/ess-dmsc/forwarder/badges/main/coverage.svg)](https://gitlab.esss.lu.se/ecdc/ess-dmsc/forwarder/-/graphs/main/charts)
 
 
 # Forwarder
 Forwards EPICS PVs to Apache Kafka. Part of the ESS data streaming pipeline.
 
+Both `Channel Access` and `PV Access` EPICS protocols are supported.
+The protocol can be configured independently for each PV.
+
 ## Installing dependencies
 
 Python 3.8 or higher is required. https://www.python.org/downloads/
 
-Runtime Python dependencies are listed in requirements.txt at the root of the
+Runtime Python dependencies are declared in `pyproject.toml`
+and pinned in requirements.txt at the root of the
 repository. They can be installed from a terminal by running
 ```
 pip install -r requirements.txt
 ```
 
-## Usage
+## Launch
 To run with minimal settings:
 ```
 forwarder_launch.py --config-topic some_server:9092/some_config_topic --status-topic some_server:9092/some_status_topic --output-broker some_other_server:9092
@@ -67,7 +71,7 @@ Example: `SCRAM-SHA-256\alice@10.123.123.1:9092/topic`.
 
 Adding or removing PVs to be forwarded is done by publishing configuration change messages to the configuration
 topic specified in the command line arguments. Such messages must be serialised as FlatBuffers using
-the rf5k schema which can be found [here](https://github.com/ess-dmsc/streaming-data-types/blob/master/schemas/rf5k_forwarder_config.fbs).
+the fc00 schema which can be found [here](https://github.com/ess-dmsc/streaming-data-types/blob/master/schemas/fc00_forwarder_config.fbs).
 Support for serialising and deserialising these messages in Python in available in the
 [ess-streaming-data-types](https://pypi.org/project/ess-streaming-data-types/) library.
 
@@ -77,6 +81,7 @@ There are three choices for the UpdateType of the configuration message:
  * ADD - add the specified streams to the existing set of streams
  * REMOVE - remove the specified streams from the set of streams
  * REMOVEALL - remove all streams
+ * REPLACE - remove all streams and add the specified streams
 
 A stream contains:
  * The name of the PV to be forwarded.
@@ -86,6 +91,9 @@ A stream contains:
    * Note that additional messages with different schemas may be configured by the forwarder 
      automatically. In particular, every PV will also generate `ep01` messages, and PVs 
      configured for `f144` will forward alarm information as `al00` messages.
+ * The last argument is a boolean indicating whether the PV should be periodically forwarded even if the value hasn't changed.
+   The periodic update is useful for signals like motor positions which might not change often, but the periodic update should be
+   turned off for signals like viscosity in a rheometer which is measured at a specific time and we don't want to send the same value again.
 
 
 Note that when removing (using REMOVE) configured streams, not all fields in the `Stream` table of the schema need to be populated.
@@ -106,49 +114,42 @@ To use for real, replace CONFIG_BROKER, CONFIG_TOPIC and STREAMS with values cor
 
 ```python
 from confluent_kafka import Producer
-from streaming_data_types.forwarder_config_update_rf5k import (
-    serialise_rf5k,
-    StreamInfo,
-    Protocol,
-)
-from streaming_data_types.fbschemas.forwarder_config_update_rf5k.UpdateType import (
-    UpdateType,
-)
+from streaming_data_types.forwarder_config_update_fc00 import (Protocol,
+                                                               StreamInfo,
+                                                               serialise_fc00)
+from streaming_data_types.fbschemas.forwarder_config_update_fc00.UpdateType import UpdateType
 
 CONFIG_BROKER = "some_kafka_broker:9092"
 
 CONFIG_TOPIC = "TEST_forwarderConfig"
 
 STREAMS = [
-    StreamInfo("IOC:PV1", "f142", "some_topic", Protocol.Protocol.PVA),
-    StreamInfo("IOC:PV2", "f142", "some_other_topic", Protocol.Protocol.CA),
-    StreamInfo("IOC:PV3", "f142", "some_other_topic", Protocol.Protocol.PVA),
+    StreamInfo("IOC:PV1", "f144", "some_topic", Protocol.Protocol.PVA, 1),
+    StreamInfo("IOC:PV2", "f144", "some_other_topic", Protocol.Protocol.CA, 1),
+    StreamInfo("IOC:PV3", "f144", "some_other_topic", Protocol.Protocol.PVA, 0),
 ]
 
 producer = Producer({"bootstrap.servers": CONFIG_BROKER})
 
 # Add new streams
-producer.produce(CONFIG_TOPIC, serialise_rf5k(UpdateType.ADD, STREAMS))
+producer.produce(CONFIG_TOPIC, serialise_fc00(UpdateType.ADD, STREAMS))
+
+# Replace all streams (note that this will remove all the existing streams)
+# producer.produce(CONFIG_TOPIC, serialise_fc00(UpdateType.REPLACE, STREAMS))
 
 # Remove one stream (note that you need to pass the argument as a list)
-# producer.produce(CONFIG_TOPIC, serialise_rf5k(UpdateType.REMOVE, [STREAMS[0]]))
+# producer.produce(CONFIG_TOPIC, serialise_fc00(UpdateType.REMOVE, [STREAMS[0]]))
 
 # Remove all the streams at once
 #   USE WITH CAUTION!!
-# producer.produce(CONFIG_TOPIC, serialise_rf5k(UpdateType.REMOVEALL, []))
+# producer.produce(CONFIG_TOPIC, serialise_fc00(UpdateType.REMOVEALL, []))
 
 producer.flush()
 ```
 
-# Developer information
+## Developer information
 
-## Development dependencies
-
-Development dependencies (including all runtime dependencies) can be installed by using the following command
-
-```
-pip install -r requirements-dev.txt
-```
+### pre-commit hooks
 
 `black`, `flake8` and `mypy` can be used as a pre-commit hook (installed by [pre-commit](https://pre-commit.com/)).
 You need to run
@@ -162,3 +163,27 @@ pre-commit run --all-files
 ```
 This command can also be used to run the hooks manually.
 
+### Installing development dependencies
+
+Development dependencies (including all runtime dependencies) can be installed by using the following command
+
+```
+pip install -r requirements-dev.txt
+```
+
+### Updating dependencies
+
+The `requirements.txt` and `requirements-dev.txt` files are generated using
+[pip-tools](https://pip-tools.readthedocs.io), which produces a full list of
+pinned versions generated from the dependencies declared in `pyproject.toml`.
+
+To generate or update the complete list of dependencies:
+
+1. Activate your local virtual environment and make sure you have pip and pip-tools installed: `pip install -U pip pip-tools`
+1. Generate requirements.txt: `pip-compile -v --resolver=backtracking -o requirements.txt pyproject.toml`
+1. Generate requirements-dev.txt: `pip-compile -v --resolver=backtracking --extra dev -o requirements-dev.txt pyproject.toml`
+
+### Developer notes
+
+Additional design and implementation details are available at
+[Developer notes](docs/developer-notes.md).

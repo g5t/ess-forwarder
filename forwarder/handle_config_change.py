@@ -8,6 +8,8 @@ from p4p.client.thread import Context as PvaContext
 from forwarder.common import Channel, CommandType, ConfigUpdate
 from forwarder.configuration_store import ConfigurationStore, NullConfigurationStore
 from forwarder.kafka.kafka_producer import KafkaProducer
+from forwarder.metrics import Counter, Gauge
+from forwarder.metrics.statistics_reporter import StatisticsReporter
 from forwarder.status_reporter import StatusReporter
 from forwarder.update_handlers.create_update_handler import (
     UpdateHandler,
@@ -24,6 +26,9 @@ def _subscribe_to_pv(
     logger: Logger,
     fake_pv_period: int,
     pv_update_period: Optional[int],
+    statistics_reporter: Optional[StatisticsReporter] = None,
+    pvs_subscribed_metric: Optional[Gauge] = None,
+    processing_errors_metric: Optional[Counter] = None,
 ):
     if new_channel in update_handlers.keys():
         logger.warning(
@@ -39,19 +44,24 @@ def _subscribe_to_pv(
             pva_ctx,
             new_channel,
             fake_pv_period,
-            periodic_update_ms=pv_update_period,
+            periodic_update_ms=pv_update_period if new_channel.periodic else None,
+            statistics_reporter=statistics_reporter,
+            processing_errors_metric=processing_errors_metric,
         )
     except RuntimeError as error:
         logger.error(str(error))
     logger.info(
         f"Subscribed to PV name='{new_channel.name}', schema='{new_channel.schema}', topic='{new_channel.output_topic}'"
     )
+    if pvs_subscribed_metric:
+        pvs_subscribed_metric.inc()
 
 
 def _unsubscribe_from_pv(
     remove_channel: Channel,
     update_handlers: Dict[Channel, UpdateHandler],
     logger: Logger,
+    pvs_subscribed_metric: Optional[Gauge] = None,
 ):
     def _match_channel_field(
         field_in_remove_request: Optional[str], field_in_existing_channel: Optional[str]
@@ -88,6 +98,8 @@ def _unsubscribe_from_pv(
     for channel in channels_to_remove:
         update_handlers[channel].stop()
         del update_handlers[channel]
+        if pvs_subscribed_metric:
+            pvs_subscribed_metric.dec()
 
     logger.info(
         f"Unsubscribed from PVs matching name='{remove_channel.name}', schema='{remove_channel.schema}', topic='{remove_channel.output_topic}'"
@@ -95,10 +107,14 @@ def _unsubscribe_from_pv(
 
 
 def _unsubscribe_from_all(
-    update_handlers: Dict[Channel, UpdateHandler], logger: Logger
+    update_handlers: Dict[Channel, UpdateHandler],
+    logger: Logger,
+    pvs_subscribed_metric: Optional[Gauge] = None,
 ):
     for update_handler in update_handlers.values():
         update_handler.stop()
+        if pvs_subscribed_metric:
+            pvs_subscribed_metric.dec()
     update_handlers.clear()
     logger.info("Unsubscribed from all PVs")
 
@@ -114,18 +130,30 @@ def handle_configuration_change(
     logger: Logger,
     status_reporter: StatusReporter,
     configuration_store: ConfigurationStore = NullConfigurationStore,
+    statistics_reporter: Optional[StatisticsReporter] = None,
+    pvs_subscribed_metric: Optional[Gauge] = None,
+    processing_errors_metric: Optional[Counter] = None,
 ):
     """
     Add or remove update handlers according to the requested change in configuration
     """
     if configuration_change.command_type == CommandType.REMOVE_ALL:
-        _unsubscribe_from_all(update_handlers, logger)
+        _unsubscribe_from_all(
+            update_handlers, logger, pvs_subscribed_metric=pvs_subscribed_metric
+        )
     elif configuration_change.command_type == CommandType.INVALID:
         return
     else:
+        if configuration_change.command_type == CommandType.REPLACE:
+            _unsubscribe_from_all(
+                update_handlers, logger, pvs_subscribed_metric=pvs_subscribed_metric
+            )
         if configuration_change.channels is not None:
             for channel in configuration_change.channels:
-                if configuration_change.command_type == CommandType.ADD:
+                if configuration_change.command_type in [
+                    CommandType.ADD,
+                    CommandType.REPLACE,
+                ]:
                     _subscribe_to_pv(
                         channel,
                         update_handlers,
@@ -135,8 +163,16 @@ def handle_configuration_change(
                         logger,
                         fake_pv_period,
                         pv_update_period,
+                        statistics_reporter=statistics_reporter,
+                        pvs_subscribed_metric=pvs_subscribed_metric,
+                        processing_errors_metric=processing_errors_metric,
                     )
                 elif configuration_change.command_type == CommandType.REMOVE:
-                    _unsubscribe_from_pv(channel, update_handlers, logger)
+                    _unsubscribe_from_pv(
+                        channel,
+                        update_handlers,
+                        logger,
+                        pvs_subscribed_metric=pvs_subscribed_metric,
+                    )
     status_reporter.report_status()
     configuration_store.save_configuration(update_handlers)
