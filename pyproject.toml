@@ -40,7 +40,7 @@ dev = [
 forwarder-launch = "forwarder.scripts.run:main"
 
 [tool.setuptools.packages.find]
-include=["forwarder", "forwarder.scripts", "forwarder.kafka", "forwarder.update_handlers"]
+include=["forwarder", "forwarder.scripts", "forwarder.kafka", "forwarder.update_handlers", "forwarder.metrics"]
 
 [tool.black]
 exclude = '/(venv*|.tox)'
