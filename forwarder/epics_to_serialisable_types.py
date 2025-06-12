@@ -17,9 +17,9 @@ numpy_type_from_caproto_type = {
     ChannelType.TIME_LONG: np.int64,
     ChannelType.TIME_FLOAT: np.float32,
     ChannelType.TIME_DOUBLE: np.float64,
-    ChannelType.TIME_STRING: np.unicode_,
+    ChannelType.TIME_STRING: np.str_,
     ChannelType.TIME_ENUM: np.int32,
-    ChannelType.TIME_CHAR: np.unicode_,
+    ChannelType.TIME_CHAR: np.str_,
 }
 
 numpy_type_from_p4p_type = {
@@ -33,7 +33,7 @@ numpy_type_from_p4p_type = {
     "h": np.int16,
     "B": np.uint8,
     "b": np.int8,
-    "s": np.unicode_,
+    "s": np.str_,
     "?": np.bool_,
 }
 

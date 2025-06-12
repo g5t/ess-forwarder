@@ -25,12 +25,15 @@ class tdct_CASerialiser(CASerialiser):
         self._msg_counter = -1
 
     def _serialise(self, value_arr: np.ndarray, origin_time: int) -> Tuple[bytes, int]:
-        timestamps = value_arr + origin_time
+        # numpy>=2 type promotion changes mean this result should fit into 
+        # the dtype of value_arr, which is likely to overflow if it's not
+        # already a uint64 -- so move the type promotion into the summation
+        timestamps = value_arr.astype(np.uint64) + origin_time
         self._msg_counter += 1
         return (
             serialise_tdct(
                 name=self._source_name,
-                timestamps=timestamps.astype(np.uint64),
+                timestamps=timestamps,
                 sequence_counter=self._msg_counter,
             ),
             origin_time,
@@ -55,12 +58,15 @@ class tdct_PVASerialiser(PVASerialiser):
         self._msg_counter = -1
 
     def _serialise(self, value_arr: np.ndarray, origin_time: int) -> Tuple[bytes, int]:
-        timestamps = value_arr + origin_time
+        # numpy>=2 type promotion changes mean this result should fit into 
+        # the dtype of value_arr, which is likely to overflow if it's not
+        # already a uint64 -- so move the type promotion into the summation
+        timestamps = value_arr.astype(np.uint64) + origin_time
         self._msg_counter += 1
         return (
             serialise_tdct(
                 name=self._source_name,
-                timestamps=timestamps.astype(np.uint64),
+                timestamps=timestamps,
                 sequence_counter=self._msg_counter,
             ),
             origin_time,
