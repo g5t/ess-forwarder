@@ -54,7 +54,13 @@ class PVAUpdateHandler:
             except Exception as e:
                 self._logger.warning(f"Could not initialise metric for {pv_name}: {e}")
 
-        request = context.makeRequest("field()")
+        # FIXME Calling context.makeRequest(str)
+        #       calls an _instance_ @staticmethod which provides 'self' as its first
+        #       argument, but this drills down to `_p4p.ClientProvider.makeRequest`,
+        #       which takes only a single input.
+        #       `p4p.client.raw.wrapRequest` uses the Context _class_ to call
+        #       the wrapped makeRequest -- which we can access through PVAContext
+        request = PVAContext.makeRequest("field()")
         self._sub = context.monitor(
             pv_name,
             self._monitor_callback,

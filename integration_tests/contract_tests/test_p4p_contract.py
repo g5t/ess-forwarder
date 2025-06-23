@@ -20,7 +20,7 @@ def read_value(pvname):
             result = response
 
     ctx = Context("pva", nt=False)
-    request = ctx.makeRequest("field(value,timeStamp,alarm,control,display)")
+    request = Context.makeRequest("field(value,timeStamp,alarm,control,display)")
     subscription = ctx.monitor(
         pvname, _callback, request=request, notify_disconnect=True
     )
@@ -331,7 +331,7 @@ def test_monitor_disconnects_raises():
             raises_exception = True
 
     ctx = Context("pva", nt=False)
-    request = ctx.makeRequest("field(value,timeStamp,alarm,control,display)")
+    request = Context.makeRequest("field(value,timeStamp,alarm,control,display)")
     subscription = ctx.monitor(
         "SIMPLE:UNAVAILABLE", _callback, request=request, notify_disconnect=True
     )
@@ -359,7 +359,7 @@ def test_on_update_only_get_changeset():
     ctx.put("SIMPLE:DOUBLE3", 20, wait=True)
     ctx.put("SIMPLE:DOUBLE3.EGU", "M", wait=True)
 
-    request = ctx.makeRequest("field(value,timeStamp,alarm,control,display)")
+    request = Context.makeRequest("field(value,timeStamp,alarm,control,display)")
     subscription = ctx.monitor(
         "SIMPLE:DOUBLE3", _callback, request=request, notify_disconnect=True
     )
